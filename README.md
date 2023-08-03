@@ -27,7 +27,7 @@ Set up authentication: Download a private key file for your service account and 
 
 **Running the Project**
 run the following commands:
-- `python -m pip install opencv-python`
-- `python -m pip install pytesseract`
-- `python -m pip install google-cloud-vision`
+- `pip install opencv-python`
+- `pip install pytesseract`
+- `pip install google-cloud-vision`
 - `python reader.py`
