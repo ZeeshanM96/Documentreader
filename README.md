@@ -1,11 +1,11 @@
 # Documentreader
-DocumentReader application readers the text from an  image using opencv and google-cloud-vision 
+DocumentReader application readers the text from an  image using `opencv` and `google-cloud-vision` 
 
 This project aims to extract text from various types of documents and images using Optical Character Recognition (OCR).
 
 **Background**
 
-Initially, we were using OpenCV and PyTesseract for OCR, where OpenCV was used for image processing and PyTesseract was used to convert the processed image into text. However, this approach had a few limitations:
+Initially, we were using `OpenCV` and `PyTesseract` for OCR, where `OpenCV` was used for image processing and `PyTesseract` was used to convert the processed image into text. However, this approach had a few limitations:
 
 The quality of the text extraction was highly dependent on the quality and complexity of the input images.
 It worked best with images containing clear, block text against a plain background, and performance decreased with more complex images.
@@ -26,5 +26,8 @@ Create an API key: In the "Credentials" section, create an API key for your proj
 Set up authentication: Download a private key file for your service account and point to it with the GOOGLE_APPLICATION_CREDENTIALS environment variable.
 
 **Running the Project**
-
-`python reader.py`
+run the following commands:
+- `python -m pip install opencv-python`
+- `python -m pip install pytesseract`
+- `python -m pip install google-cloud-vision`
+- `python reader.py`
