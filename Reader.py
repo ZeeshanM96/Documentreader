@@ -5,7 +5,6 @@ from PIL import Image
 from google.cloud import vision
 import os
 
-pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = "C:\\Users\\zeesh\\Desktop\\Python\\projects\\Documentreader\\quiet-odyssey-394722-ba2fca0d219c.json"
 
 def order_points(pts):
