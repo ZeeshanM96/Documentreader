@@ -1,132 +1,107 @@
 import cv2
-import numpy as np
+import face_recognition
 from google.cloud import vision
 import os
+from google.cloud.vision_v1 import Image
 
 
-def order_points(pts):
+def initialize_google_cloud():
     """
-    Orders the given set of four points for perspective transformation.
+    Initialize the Google Cloud Vision API credentials.
+    """
+    credentials_path = "C:\\Users\\zeesh\\Desktop\\Python\\Projects\\FaceTracker\\quiet-odyssey-394722-ba2fca0d219c.json"
+    if not os.path.exists(credentials_path):
+        raise FileNotFoundError(f"Credentials file not found at {credentials_path}")
     
-    Args:
-        pts (list of tuple): List containing four (x, y) coordinates.
-        
-    Returns:
-        numpy.ndarray: Sorted coordinates in the order top-left, top-right, bottom-right, bottom-left.
-    """
-    rect = np.zeros((4, 2), dtype="float32")
-    s = pts.sum(axis=1)
-    rect[0] = pts[np.argmin(s)]
-    rect[2] = pts[np.argmax(s)]
-    diff = np.diff(pts, axis=1)
-    rect[1] = pts[np.argmin(diff)]
-    rect[3] = pts[np.argmax(diff)]
-    return rect
-
-
-def four_point_transform(image, pts):
-    """
-    Performs a four-point perspective transformation on the given image.
-    
-    Args:
-        image (numpy.ndarray): Input image.
-        pts (list of tuple): List containing four (x, y) coordinates.
-        
-    Returns:
-        numpy.ndarray: Warped image after perspective transformation.
-    """
-    rect = order_points(pts)
-    (tl, tr, br, bl) = rect
-    widthA = np.sqrt(((br[0] - bl[0]) ** 2) + ((br[1] - bl[1]) ** 2))
-    widthB = np.sqrt(((tr[0] - tl[0]) ** 2) + ((tr[1] - tl[1]) ** 2))
-    maxWidth = max(int(widthA), int(widthB))
-    heightA = np.sqrt(((tr[0] - br[0]) ** 2) + ((tr[1] - br[1]) ** 2))
-    heightB = np.sqrt(((tl[0] - bl[0]) ** 2) + ((tl[1] - bl[1]) ** 2))
-    maxHeight = max(int(heightA), int(heightB))
-    dst = np.array([
-        [0, 0],
-        [maxWidth - 1, 0],
-        [maxWidth - 1, maxHeight - 1],
-        [0, maxHeight - 1]], dtype="float32")
-    M = cv2.getPerspectiveTransform(rect, dst)
-    warped = cv2.warpPerspective(image, M, (maxWidth, maxHeight))
-    return warped
-
-def detect_document_corners(image_path):
-    """
-    Detect the four corners of the largest contour in the image.
-
-    Args:
-        image_path (str): Path to the image file.
-
-    Returns:
-        list: List of four corner points if detected, else None.
-    """
-    image = cv2.imread(image_path)
-    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    gray = cv2.GaussianBlur(gray, (5, 5), 0)
-    edged = cv2.Canny(gray, 75, 200)
-
-    contours, _ = cv2.findContours(edged.copy(), cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
-    contours = sorted(contours, key=cv2.contourArea, reverse=True)[:5]
-
-    for c in contours:
-        peri = cv2.arcLength(c, True)
-        approx = cv2.approxPolyDP(c, 0.02 * peri, True)
-
-        if len(approx) == 4:
-            return approx.reshape(4, 2)
-    return None
-
-
-def document_scan_and_ocr(image_path, credentials_path):
-    """
-    Scans the provided document and performs OCR using Google Cloud Vision API.
-    
-    Args:
-        image_path (str): Path to the image file.
-        credentials_path (str): Path to the Google Cloud credentials JSON file.
-        
-    Returns:
-        None: Prints the detected text to the console.
-    """
-    # Set up the credentials for Google Cloud Vision API
     os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = credentials_path
 
-    # Instantiate a client
+
+def load_known_faces(directory='known_faces'):
+    """
+    Load known face images, compute encodings, and return them.
+
+    Args:
+    - directory (str): Path to directory containing known face images.
+
+    Returns:
+    - Tuple[List, List]: Known face encodings and corresponding names.
+    """
+    known_face_encodings = []
+    known_face_names = []
+
+    if not os.path.exists(directory):
+        raise FileNotFoundError(f"Directory {directory} not found.")
+    
+    for filepath in os.listdir(directory):
+        image_path = os.path.join(directory, filepath)
+        image = face_recognition.load_image_file(image_path)
+        encodings = face_recognition.face_encodings(image)
+
+        if encodings:
+            known_face_encodings.append(encodings[0])
+            known_face_names.append(filepath.split('-')[0])
+    
+    return known_face_encodings, known_face_names
+
+
+def main():
+    """
+    Main function to capture video, detect and recognize faces.
+    """
+    initialize_google_cloud()
+    
+    known_face_encodings, known_face_names = load_known_faces()
+
     client = vision.ImageAnnotatorClient()
+    cap = cv2.VideoCapture(0)
 
-    # Load the image from file
-    try:
-        with open(image_path, 'rb') as image_file:
-            content = image_file.read()
-    except FileNotFoundError:
-        print(f"Error: {image_path} not found.")
-        return
+    if not cap.isOpened():
+        raise RuntimeError("Failed to open the camera.")
+    
+    while True:
+        ret, frame = cap.read()
 
-    # By default, use the original image for OCR.
-    image = vision.Image(content=content)
+        if not ret:
+            break
+        
+        image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        success, encoded_image = cv2.imencode('.png', image)
 
-    corners = detect_document_corners(image_path)
-    if corners is not None:
-        warped_image = four_point_transform(cv2.imread(image_path), corners)
-        # Convert the warped image back to the format required by Vision API.
-        _, buf = cv2.imencode(".png", warped_image)
-        image = vision.Image(content=buf.tobytes())
+        if not success:
+            continue
+        
+        content = encoded_image.tobytes()
+        vision_image = Image(content=content)
 
-    # Perform text detection
-    response = client.text_detection(image=image)
-    texts = response.text_annotations
+        response = client.face_detection(image=vision_image)
+        faces = response.face_annotations
 
-    # Print the detected text
-    for text in texts:
-        print(text.description)
+        for face in faces:
+            vertices = [(vertex.x, vertex.y) for vertex in face.bounding_poly.vertices]
+            cv2.rectangle(image, vertices[0], vertices[2], (0, 255, 0), 2)
 
+            face_location = (vertices[0][1], vertices[2][0], vertices[2][1], vertices[0][0])
+            face_encoding = face_recognition.face_encodings(image, [face_location])[0]
+            matches = face_recognition.compare_faces(known_face_encodings, face_encoding, tolerance=0.5)
+
+            name = "Unknown"
+            if True in matches:
+                match_index = matches.index(True)
+                name = known_face_names[match_index]
+            
+            cv2.putText(image, name, vertices[0], cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
+        
+        cv2.imshow('Frame', image)
+
+        if cv2.waitKey(1) & 0xFF == ord('q'):
+            break
+
+    cap.release()
+    cv2.destroyAllWindows()
 
 
 if __name__ == "__main__":
-    # image and gcp credentials path.
-    image_path = "C:\\Users\\zeesh\\Desktop\\Python\\Opencv-project\\Documentreader\\image.png"
-    credentials_path = "C:\\Users\\zeesh\\Desktop\\Python\\Opencv-project\\Documentreader\\quiet-odyssey-394722-ba2fca0d219c.json"
-
-    document_scan_and_ocr(image_path, credentials_path)
+    try:
+        main()
+    except Exception as e:
+        print(f"An error occurred: {e}")
